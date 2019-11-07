@@ -1,0 +1,7 @@
+######     VAR in R      ######## https://www.youtube.com/watch?v=gp_kSs-hSjI
+library(quantmod)
+library(PerformanceAnalytics)
+
+####Aktienzeitreihe ziehen (adjusted!) (SQL) und Kurse generieren
+Daimler<-...
+DB<-...
