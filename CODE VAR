@@ -1,0 +1,29 @@
+### Performance analystics und Yahoo zeitreihen (<2018)###
+
+######     VAR in R      ######## https://www.youtube.com/watch?v=gp_kSs-hSjI
+install.packages("quantmod")
+library(quantmod)
+install.packages("PerformanceAnalytics")
+library(PerformanceAnalytics)
+
+Portfolio<-c("DAI","DB")
+
+getSymbols(Portfolio, src="yahoo" )
+
+DAI<-na.omit(DAI)
+DB<-na.omit(DB)
+
+
+
+
+ReturnsDAI<-ROC(DAI$DAI.Close, type="discrete")
+
+ReturnsDB<-ROC(DB$DB.Close, type="discrete")
+
+ReturnsDAI<-na.omit(ReturnsDAI)
+ReturnsDB<-na.omit(ReturnsDB)
+
+VAR(ReturnsDAI, p=0.95, method="historical" )
+VaR(ReturnsDAI, p=0.99, method="historical" )
+
+names(ReturnsDB) <- c("Deutsche Bank")
