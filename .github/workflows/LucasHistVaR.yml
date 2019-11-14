@@ -1,0 +1,32 @@
+###Alternative Berechnung mit Normalverteilung (Var-Covar) https://www.youtube.com/watch?v=k1XAO1YCV8I
+
+install.packages("quantmod")
+library(quantmod)
+install.packages("PerformanceAnalytics")
+library(PerformanceAnalytics)
+
+###Zeitreihe und Renditen hernehmen###
+getSymbols("DAI", src="yahoo" )
+getSymbols("DB", src="yahoo" )
+
+### Rate of change von Tagesndkursen berechnen lassen (Rendite)#####
+ReturnsDAI<-ROC(DAI$DAI.Close, type="discrete")
+ReturnsDB<-ROC(DB$DB.Close, type="discrete")
+
+##Spalten umbenennen##
+names(ReturnsDAI) <- c("Daimler")
+names(ReturnsDB) <- c("Deutsche Bank")
+
+####Erwartungswert und Standardabweichung berechnen###
+mwDAI<-mean.geometric(ReturnsDAI)
+mwDB<-mean.geometric(ReturnsDB)
+
+sdDAI<-StdDev(ReturnsDAI)
+sdDB<-StdDev(ReturnsDB)
+
+### Quantil der Normalverteilung berechnen###
+HDauer<-c(20)
+
+qnorm(.95, mean=mwDAI, sd=sdDAI, lower.tail = TRUE)
+
+VAR_DAI<-((qnorm(.95, mean=mwDAI, sd=sdDAI, lower.tail = TRUE))*sdDAI)*sqrt(HDauer)
