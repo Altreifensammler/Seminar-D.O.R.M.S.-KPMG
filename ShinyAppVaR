@@ -1,0 +1,136 @@
+#load necessary packages##
+require("dplyr")
+require("ggplot2")
+setwd("C:/Users/Internet/Desktop/R_DORMS")
+###Zeitreihe aus csv. ziehen###
+TabelleDAI<-read.csv2("Daimler.csv", sep=";")
+TabelleDB<-read.csv2("DeutscheBank.csv", sep=";")
+
+###Data Frame erzeugen mit nur 2 Variablen (Datum und Kurs)###
+DAI<-data.frame(Datum=as.Date(TabelleDAI$Datum[1:501]),  DAI.Schluss=(TabelleDAI$Schlusskurs[1:501]))
+DB<-data.frame(Datum=as.Date(TabelleDB$Datum[1:501]),   DB.Schluss=TabelleDB$Schlusskurs[1:501])
+
+##Portfolio Data frame##
+Portfolio<-merge(DB,DAI)
+## letzte 2 Jahre Fokus und erneut sortieren
+#Portfolio<-Portfolio[(nrow(Portfolio)-499):nrow(Portfolio),]
+#Portfolio<-Portfolio[order(Portfolio$Datum),]
+#rownames(Portfolio)<-1:nrow(Portfolio)
+
+
+##################################################################
+#####        Berechnung   #######################################
+#################################################################
+#### Zeitreihe der Anzahl der Aktien generieren (Hypothese: Deutsche Bank wird reduziert
+#### Daimler wird intensiviert)
+##Vektor mit Index-Zahlen erzeugen (um lineare Funktion für Aktienanzahl abhängig von der 
+## Zeit zu erzeugen)
+
+index.vector<-as.numeric(rownames(Portfolio))
+# Anzahl DB Aktien (sinkt)
+Num.DB<-c()
+for (i in c(index.vector)) {
+  if( 10000-8*(i-1)<=0){
+    Num.DB[i]<-0
+  }
+  else
+    Num.DB[i]<-(10000-8*(i-1))
+}
+# Anzahl DAI Aktien (steigt proportional)
+Num.DAI<-c()
+for (i in c(index.vector)) {
+  Num.DAI[i]<-(10000+2*(i-1))
+}
+
+## Aktienanzahl in Data.Frame Portfolio einfügen (Funktion siehe Funktionsblatt)
+Portfolio$Anzahl.DB<-Num.DB
+Portfolio$Anzahl.DAI<-Num.DAI
+  
+## Reorder Columns
+Portfolio<-Portfolio[,c("Datum","DB.Schluss","Anzahl.DB","DAI.Schluss","Anzahl.DAI")]
+  
+
+#Funktion für investiertes Geld erzeugen
+MoneyValue<-function(Kursx,Kursy,Anzahlx,Anzahly){
+  Invest<- Kursx*Anzahlx+Kursy*Anzahly
+}
+##neue Spalte erzeugen mit Portfoli.Wert
+Portfolio$Portfolio.Wert<-MoneyValue(Portfolio$DB.Schluss,Portfolio$DAI.Schluss,Portfolio$Anzahl.DB, Portfolio$Anzahl.DAI)
+  
+#Funktion für Vektor %-Anteil der Zusammensetzung erzeugen
+AnteilAktie<-function(Aktienkurs,Anzahl,PortfolioWert){
+  WertAktie<-Aktienkurs*Anzahl
+  AnteilPortfolio<-WertAktie/PortfolioWert
+}
+## Spalte mit Gewichten einfügen
+Portfolio$Gewicht.DB<-AnteilAktie(Portfolio$DB.Schluss, Portfolio$Anzahl.DB,Portfolio$Portfolio.Wert)
+Portfolio$Gewicht.DAI<-AnteilAktie(Portfolio$DAI.Schluss,Portfolio$Anzahl.DAI,Portfolio$Portfolio.Wert)
+
+###Funktion für Renditen machen(dplyr)###
+returns<-function(x, n=1){
+  Rendite<- x/lag(x,n)-1%>%
+    return()
+}
+### Funktion für PortfolioRendite erstellen###
+# Gespräch Vogt: Funktion ist richtig, aber bei Portfolio muss Rendite von beiden 
+# Aktien gewichtet zu einer gesamtrendite gerechnet werden und dann erst in die 
+# VaR Funktion einsetzen 1-w1(Rendite1)+1-w2(Rendite2)
+Port.returns<-function(Kursx,Kursy,Gewichtx){
+  P.returns<-Kursx*Gewichtx+Kursy*(1-Gewichtx)
+}
+### gewichtete Portfolio-Performance##
+
+Port.Kurs<-function(Kursx,Kursy,Gewichtx){
+  Kurs<-Kursx*Gewichtx+Kursy*(1-Gewichtx)
+}
+
+### Spalte mit PortfolioKurs und Renditen Renditen in den Dataframe bauen###
+Portfolio$Port.Kurs.gewichtet<-Port.Kurs(Portfolio$DB.Schluss,Portfolio$DAI.Schluss,Portfolio$Gewicht.DB)
+Portfolio$DAI.Rendite<-Portfolio$DAI.Schluss%>%returns()
+Portfolio$DB.Rendite<-Portfolio$DB.Schluss%>%returns()
+Portfolio$PortfolioRendite<- Port.returns(Portfolio$DB.Rendite,Portfolio$DAI.Rendite,Portfolio$Gewicht.DB)
+
+#VAR
+### der letzten 250 Tage mit .05 quantil und Haltedauer 20 Tage
+
+Signifikanz<-0.01
+Haltedauer<- 20
+Zeitraum<- 250
+
+VaR.hist<- function(x){
+  obs<-length(x)
+  quantil<-quantile(x[(obs-Zeitraum):obs],probs=Signifikanz)
+  VaR<- quantil*sqrt(Haltedauer)%>%
+    return()
+}
+##Portfolio VaR einf?gen mit VaR.hist()###
+VaR.percent<-abs(Portfolio$PortfolioRendite%>%VaR.hist())
+VaR.total<-VaR.percent*Portfolio$InvestiertesGeld[length(Portfolio)]
+
+###Backtest Value-at-Risk
+#### Funktion für VaR historische Methode, basierend auf Renditen empirischer Beobachtungen der 
+##### der jeweils letzten 250 Tage mit .05 Quantil und Haltedauer 20 Tage
+index.vector<-as.numeric(rownames(Portfolio))
+VaR.perDay<-c()
+for (i in c(index.vector)){
+  if(i<=Zeitraum){
+    VaR.perDay[i]<-NULL}
+  else 
+    VaR.perDay[i]<-#+1 weil Vorhersage
+      quantile(Portfolio$PortfolioRendite[(i-(Zeitraum+1)):(i-1)],probs=Signifikanz, na.rm=TRUE)
+}
+
+Prediction.VaR<-data.frame(Datum=Portfolio$Datum,VaR.predicted=VaR.perDay[1:(length(VaR.perDay))])
+
+Backtest<-data.frame(Prediction.VaR,Portfolio=Portfolio$PortfolioRendite, Übertritt=ifelse(Prediction.VaR$VaR.predicted>Portfolio$PortfolioRendite,1,0))
+
+Count<-length(which(Backtest$Übertritt==1))
+
+
+
+
+# csv.speichern#
+#write.csv(Portfolio[,1:6], "C:/Users/Internet/Desktop/FH Luca/Semester 5/Seminar Risk Management/Seminar/R tests/Portfolio.csv")
+
+#write.csv(Portfolio, "C:/Users/Internet/Desktop/FH Luca/Semester 5/Seminar Risk Management/Seminar/R tests/Portfolio.nachBearbeitung.csv")
+#write.csv(Backtest, "C:/Users/Internet/Desktop/FH Luca/Semester 5/Seminar Risk Management/Seminar/R tests/Backtest.csv")
